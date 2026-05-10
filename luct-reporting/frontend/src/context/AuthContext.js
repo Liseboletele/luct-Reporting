@@ -1,115 +1,136 @@
-import React, { createContext, useContext, useEffect, useReducer } from 'react';
-import { authAPI } from '../services/api';
-import { storage } from '../services/storage';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+} from 'firebase/auth';
+import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '../firebase/config';
 
 const AuthContext = createContext(null);
 
-const initialState = {
-  user: null,
-  token: null,
-  isLoading: true,
-  isAuthenticated: false,
-};
-
-const withTimeout = (promise, ms, label) =>
-  Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out`)), ms)
-    ),
-  ]);
-
-const persistSession = async (user, token) => {
-  try {
-    await withTimeout(
-      Promise.all([
-        storage.setItem('authToken', token),
-        storage.setItem('userData', JSON.stringify(user)),
-      ]),
-      5000,
-      'Saving session'
-    );
-  } catch (error) {
-    console.warn('Session storage skipped:', error.message);
-  }
-};
-
-function authReducer(state, action) {
-  switch (action.type) {
-    case 'RESTORE_TOKEN':
-      return { ...state, user: action.user, token: action.token, isAuthenticated: !!action.token, isLoading: false };
-    case 'LOGIN':
-      return { ...state, user: action.user, token: action.token, isAuthenticated: true, isLoading: false };
-    case 'LOGOUT':
-      return { ...state, user: null, token: null, isAuthenticated: false, isLoading: false };
-    case 'UPDATE_USER':
-      return { ...state, user: { ...state.user, ...action.user } };
-    default:
-      return state;
-  }
-}
-
 export const AuthProvider = ({ children }) => {
-  const [state, dispatch] = useReducer(authReducer, initialState);
+  const [user, setUser] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Restore session on app load
+  // Listen to Firebase Auth state — this is what drives navigation
   useEffect(() => {
-    const restoreSession = async () => {
-      try {
-        const token = await storage.getItem('authToken');
-        const userStr = await storage.getItem('userData');
-        if (token && userStr) {
-          const user = JSON.parse(userStr);
-          dispatch({ type: 'RESTORE_TOKEN', token, user });
-        } else {
-          dispatch({ type: 'RESTORE_TOKEN', token: null, user: null });
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          // Get extra profile data from Firestore
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          const firestoreData = userDoc.exists() ? userDoc.data() : {};
+          const fullUser = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            ...firestoreData,
+          };
+          setUser(fullUser);
+          setIsAuthenticated(true);
+        } catch (e) {
+          // Firestore read failed — still authenticate with basic info
+          setUser({ uid: firebaseUser.uid, email: firebaseUser.email });
+          setIsAuthenticated(true);
         }
-      } catch {
-        dispatch({ type: 'RESTORE_TOKEN', token: null, user: null });
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
       }
-    };
-    restoreSession();
+      setIsLoading(false);
+    });
+
+    return unsubscribe;
   }, []);
 
+  // LOGIN — Firebase Auth signs in, onAuthStateChanged handles the rest
   const login = async (email, password) => {
-    const res = await authAPI.login({ email, password });
-    const { user, token } = res.data.data;
-    dispatch({ type: 'LOGIN', user, token });
-    persistSession(user, token);
-    return user;
-  };
-
-  const register = async (data) => {
-    const res = await authAPI.register(data);
-    const { user, token } = res.data.data;
-    dispatch({ type: 'LOGIN', user, token });
-    persistSession(user, token);
-    return user;
-  };
-
-  const logout = async () => {
-    dispatch({ type: 'LOGOUT' });
     try {
-      await authAPI.logout();
-      await withTimeout(
-        Promise.all([
-          storage.deleteItem('authToken'),
-          storage.deleteItem('userData'),
-        ]),
-        3000,
-        'Clearing session'
-      );
-    } catch (error) {
-      console.warn('Session clear skipped:', error.message);
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      return cred.user;
+    } catch (e) {
+      const messages = {
+        'auth/user-not-found': 'No account found with this email. Please register first.',
+        'auth/wrong-password': 'Incorrect password. Please try again.',
+        'auth/invalid-email': 'Please enter a valid email address.',
+        'auth/invalid-credential': 'Incorrect email or password. Please try again.',
+        'auth/too-many-requests': 'Too many attempts. Please try again later.',
+        'auth/network-request-failed': 'Network error. Check your internet connection.',
+      };
+      throw new Error(messages[e.code] || e.message);
     }
   };
 
-  const updateUser = (updates) => {
-    dispatch({ type: 'UPDATE_USER', user: updates });
+  // REGISTER — creates Firebase Auth account + Firestore profile, then signs out
+  const register = async (form) => {
+    try {
+      const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
+
+      await setDoc(doc(db, 'users', cred.user.uid), {
+        uid: cred.user.uid,
+        fullName: form.fullName,
+        email: form.email,
+        role: form.role,
+        facultyName: form.facultyName || '',
+        staffId: form.staffId || '',
+        studentId: form.studentId || '',
+        programName: form.programName || '',
+        createdAt: serverTimestamp(),
+      });
+
+      // Sign out so user must log in manually after registration
+      await signOut(auth);
+      return cred.user;
+    } catch (e) {
+      const messages = {
+        'auth/email-already-in-use': 'An account with this email already exists.',
+        'auth/weak-password': 'Password must be at least 6 characters.',
+        'auth/invalid-email': 'Please enter a valid email address.',
+        'auth/network-request-failed': 'Network error. Check your internet connection.',
+      };
+      throw new Error(messages[e.code] || e.message);
+    }
+  };
+
+  // LOGOUT
+  const logout = async () => {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.warn('Logout error:', e.message);
+    }
+    setUser(null);
+    setIsAuthenticated(false);
+  };
+
+  // UPDATE USER PROFILE
+  const updateUser = async (updates) => {
+    try {
+      if (user?.uid) {
+        await updateDoc(doc(db, 'users', user.uid), updates);
+      }
+      setUser((prev) => ({ ...prev, ...updates }));
+    } catch (e) {
+      console.warn('Update user error:', e.message);
+      setUser((prev) => ({ ...prev, ...updates }));
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout, updateUser }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        isAuthenticated,
+        token: user?.uid || null,
+        login,
+        register,
+        logout,
+        updateUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -1,0 +1,7 @@
+/frontend/
+/.expo/
+node_modules/
+.env
+credentials/
+credentials.json
+*.jks

@@ -92,17 +92,17 @@ export default function UsersScreen() {
           style={[styles.statusToggle, { backgroundColor: item.isActive ? COLORS.success + '18' : COLORS.danger + '18' }]}
           onPress={() => handleToggleStatus(item)}
         >
-          <Text style={{ fontSize: 16 }}>{item.isActive ? '✅' : '🚫'}</Text>
+          <Text style={{ fontSize: 16 }}>{item.isActive ? '' : ''}</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.userMeta}>
         <Badge label={ROLE_LABELS[item.role] || item.role} color={ROLE_COLORS[item.role] || COLORS.gray500} />
-        {item.staffId && <Text style={styles.metaChip}>👤 {item.staffId}</Text>}
-        {item.studentId && <Text style={styles.metaChip}>🎓 {item.studentId}</Text>}
+        {item.staffId && <Text style={styles.metaChip}> {item.staffId}</Text>}
+        {item.studentId && <Text style={styles.metaChip}> {item.studentId}</Text>}
       </View>
 
-      {item.facultyName && <Text style={styles.faculty}>🏛️ {item.facultyName}</Text>}
+      {item.facultyName && <Text style={styles.faculty}>{item.facultyName}</Text>}
 
       <Text style={styles.joined}>
         Joined {new Date(item.createdAt).toLocaleDateString()} ·{' '}

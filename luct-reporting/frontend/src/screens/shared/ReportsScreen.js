@@ -73,14 +73,14 @@ export default function ReportsScreen({ navigation }) {
         <Badge label={item.status.toUpperCase()} color={STATUS_COLORS[item.status] || COLORS.gray500} />
       </View>
       <View style={styles.reportMeta}>
-        <Text style={styles.metaItem}>🏫 {item.className}</Text>
-        <Text style={styles.metaItem}>📅 {item.dateOfLecture}</Text>
+        <Text style={styles.metaItem}> {item.className}</Text>
+        <Text style={styles.metaItem}> {item.dateOfLecture}</Text>
       </View>
       <View style={styles.reportMeta}>
-        <Text style={styles.metaItem}>👨‍🏫 {item.lecturerName}</Text>
-        <Text style={styles.metaItem}>👥 {item.actualStudentsPresent}/{item.totalRegisteredStudents}</Text>
+        <Text style={styles.metaItem}> {item.lecturerName}</Text>
+        <Text style={styles.metaItem}> {item.actualStudentsPresent}/{item.totalRegisteredStudents}</Text>
       </View>
-      <Text style={styles.topic} numberOfLines={2}>📖 {item.topicTaught}</Text>
+      <Text style={styles.topic} numberOfLines={2}> {item.topicTaught}</Text>
       {item.rating && (
         <View style={{ flexDirection: 'row', marginTop: 8, gap: 4 }}>
           {[1,2,3,4,5].map(s => (
@@ -102,7 +102,7 @@ export default function ReportsScreen({ navigation }) {
           <View style={{ flexDirection: 'row', gap: 8 }}>
             {(user?.role === 'program_leader' || user?.role === 'principal_lecturer') && (
               <TouchableOpacity style={styles.exportBtn} onPress={handleExport}>
-                <Text style={styles.exportText}>📥 Export</Text>
+                <Text style={styles.exportText}> Export</Text>
               </TouchableOpacity>
             )}
             {canCreate && (
@@ -125,7 +125,7 @@ export default function ReportsScreen({ navigation }) {
             <EmptyState
               title="No reports found"
               subtitle={canCreate ? 'Submit your first lecture report using the + button' : 'No reports available yet'}
-              icon="📋"
+              icon=""
             />
           }
         />
